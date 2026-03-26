@@ -284,6 +284,49 @@ class CanonicalReferral(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Schema 6: Summary Output Schema
+# ---------------------------------------------------------------------------
+
+class SummaryTriageRecommendation(BaseModel):
+    urgency: Optional[str] = None
+    confidence: Optional[float] = None
+    reasoning: Optional[str] = None
+    red_flags: list[str] = Field(default_factory=list)
+    action_items: list[str] = Field(default_factory=list)
+
+
+class SummaryTrialSignal(BaseModel):
+    signal_type: Optional[str] = None
+    detail: Optional[str] = None
+    source_field: Optional[str] = None
+
+
+class SummaryTrialRelevance(BaseModel):
+    potentially_eligible: bool = False
+    signals: list[SummaryTrialSignal] = Field(default_factory=list)
+    suggested_search_terms: list[str] = Field(default_factory=list)
+
+
+class SummaryScreeningInterpretation(BaseModel):
+    instrument: Optional[str] = None
+    score: Optional[str] = None
+    interpretation: Optional[str] = None
+    clinical_significance: Optional[str] = None
+
+
+class SummaryOutput(BaseModel):
+    """Schema 6 — output from the summarization + triage LLM call."""
+    one_line_summary: Optional[str] = None
+    summary_narrative: Optional[str] = None
+    triage_recommendation: Optional[SummaryTriageRecommendation] = None
+    clinical_trial_relevance: Optional[SummaryTrialRelevance] = None
+    missing_information: list[str] = Field(default_factory=list)
+    screening_interpretations: list[SummaryScreeningInterpretation] = Field(
+        default_factory=list
+    )
+
+
+# ---------------------------------------------------------------------------
 # Schema 2: CCD Intermediate Schema
 # ---------------------------------------------------------------------------
 
