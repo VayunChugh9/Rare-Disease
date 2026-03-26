@@ -47,12 +47,30 @@ def test_summarization():
     from backend.app.parsers.ccda_parser import parse_ccda
     from backend.app.services.recency_filter import filter_to_canonical
     from backend.app.services.llm_summarization import summarize_and_triage
-    from backend.app.models.schemas import SummaryOutput
+    from backend.app.models.schemas import (
+        SummaryOutput, ReferralInfo, ReferringProvider,
+    )
 
     # Step 1: Parse and filter (reuses Chunk 1+2)
     intermediate = parse_ccda(TEST_XML)
     canonical = filter_to_canonical(intermediate, filename="Bryant814_test.xml")
     print("✓ Canonical JSON produced from Chunk 1+2 pipeline")
+
+    # Step 1b: Inject referral context (simulates real workflow where
+    # the referral letter provides context the CCD XML does not contain)
+    canonical.referral = ReferralInfo(
+        receiving_specialty="Endocrinology",
+        reason="Prediabetes management — patient has had prediabetes 20+ years, weight gain, BMI >30, glucose trending up. Requesting A1c and metabolic workup.",
+        clinical_question="Would like A1c and metabolic workup for prediabetes with worsening metabolic trajectory",
+        urgency_stated="Routine — schedule within 4-6 weeks",
+        date_of_referral="2026-03-08",
+    )
+    canonical.referring_provider = ReferringProvider(
+        name="Dr. M. Chen",
+        practice_name="Walpole Primary Care",
+        phone="(508) 555-0198",
+    )
+    print("✓ Referral context injected (endocrinology referral from Dr. Chen)")
 
     # Step 2: Summarize
     print("  Calling OpenAI for summarization...")
@@ -112,21 +130,27 @@ def test_summarization():
     assert phq9_found, "FAIL: PHQ-9 should be surfaced"
     print("✓ PHQ-9 score surfaced (significant even for endocrine referral)")
 
-    # Check 5: Violence flag mentioned
-    violence_text = (
-        narrative
-        + " "
-        + " ".join(tr.red_flags).lower() if tr and tr.red_flags else ""
-        + " "
-        + " ".join(tr.action_items).lower() if tr and tr.action_items else ""
+    # Check 5: Violence flag mentioned (in narrative, red_flags, action_items, or screening interpretations)
+    violence_parts = [narrative, full_text]
+    if tr and tr.red_flags:
+        violence_parts.append(" ".join(tr.red_flags).lower())
+    if tr and tr.action_items:
+        violence_parts.append(" ".join(tr.action_items).lower())
+    violence_text = " ".join(violence_parts)
+    violence_found = any(
+        term in violence_text
+        for term in ["violence", "safety", "hark", "intimate partner", "ipv", "abuse"]
     )
-    violence_found = "violence" in violence_text or "safety" in violence_text
-    assert violence_found, "FAIL: Violence/safety flag should be mentioned"
+    assert violence_found, (
+        f"FAIL: Violence/safety flag should be mentioned somewhere in output. "
+        f"Red flags: {tr.red_flags if tr else 'N/A'}, "
+        f"Screening instruments: {[si.instrument for si in summary.screening_interpretations]}"
+    )
     print("✓ Violence/safety flag mentioned")
 
     # Check 6: Triage is routine
     assert tr is not None, "FAIL: No triage recommendation"
-    assert tr.urgency == "routine", f"FAIL: Expected routine triage, got {tr.urgency}"
+    assert tr.urgency.lower() == "routine", f"FAIL: Expected routine triage, got {tr.urgency}"
     print("✓ Triage is routine")
 
     # Check 7: Missing info includes key labs

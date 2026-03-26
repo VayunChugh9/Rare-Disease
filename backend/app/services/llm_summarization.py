@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+import re
+from typing import Any, Optional
+
+from pydantic import ValidationError
 
 from backend.app.models.schemas import CanonicalReferral, SummaryOutput
 from backend.app.services.openai_client import (
@@ -98,7 +101,59 @@ When screening scores are present, interpret them using these thresholds:
 
 Always include the score AND the interpretation: "GAD-7: 2 (minimal anxiety)" not just "GAD-7: 2".
 For positive screens, include this in the summary narrative and as an action_item if follow-up is needed.
+
+SAFETY CONCERNS — MANDATORY:
+If the social_history contains safety_concerns (e.g., reports of violence, intimate partner violence, abuse, neglect), you MUST mention this in the narrative AND include it in red_flags or action_items. Safety concerns must NEVER be omitted, even if they seem unrelated to the referral reason. This is a patient safety requirement.
 """
+
+
+def _normalize_screening_interpretations(
+    items: list[Any],
+) -> list[dict]:
+    """Convert screening_interpretations from strings to dicts if needed.
+
+    The LLM sometimes returns entries like:
+        "PHQ-9: 18 (moderately severe depression)"
+    instead of the structured object. This normalizes them.
+    """
+    normalized = []
+    for item in items:
+        if isinstance(item, dict):
+            normalized.append(item)
+        elif isinstance(item, str):
+            # Parse pattern: "INSTRUMENT: SCORE (interpretation)"
+            match = re.match(
+                r"^([A-Za-z0-9\-]+):\s*(\S+)\s*\((.+)\)$", item.strip()
+            )
+            if match:
+                instrument, score, interpretation = match.groups()
+                # Infer clinical_significance from interpretation text
+                interp_lower = interpretation.lower()
+                if any(w in interp_lower for w in ["severe", "substantial"]):
+                    significance = "severe"
+                elif "moderate" in interp_lower:
+                    significance = "moderate"
+                elif "mild" in interp_lower or "low" in interp_lower:
+                    significance = "mild"
+                elif "positive" in interp_lower:
+                    significance = "moderate"
+                else:
+                    significance = "none"
+                normalized.append({
+                    "instrument": instrument,
+                    "score": score,
+                    "interpretation": interpretation,
+                    "clinical_significance": significance,
+                })
+            else:
+                # Fallback: store raw string as interpretation
+                normalized.append({
+                    "instrument": "Unknown",
+                    "score": "",
+                    "interpretation": item,
+                    "clinical_significance": "none",
+                })
+    return normalized
 
 
 def summarize_and_triage(
@@ -157,8 +212,17 @@ def summarize_and_triage(
             if not raw_content:
                 raise ValueError("Empty response from LLM")
 
-            # Parse and validate
+            # Parse and normalize before validation
             parsed = json.loads(raw_content)
+
+            # Normalize screening_interpretations if LLM returned strings
+            if "screening_interpretations" in parsed:
+                parsed["screening_interpretations"] = (
+                    _normalize_screening_interpretations(
+                        parsed["screening_interpretations"]
+                    )
+                )
+
             summary = SummaryOutput.model_validate(parsed)
 
             logger.info(
@@ -173,7 +237,7 @@ def summarize_and_triage(
 
             return summary
 
-        except (json.JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, ValueError, ValidationError) as exc:
             last_error = exc
             logger.warning(
                 "Summarization attempt %d failed: %s", attempt + 1, exc
