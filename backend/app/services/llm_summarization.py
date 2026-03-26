@@ -56,8 +56,8 @@ Paragraph 1 — Patient snapshot:
 "[Name], [age]-year-old [sex], referred by [provider] at [practice] to [specialty] for [reason in plain language]. [1 sentence on urgency context if relevant]."
 If referral reason is missing, state: "Referral reason was not provided in the available documents."
 
-Paragraph 2 — Relevant clinical context:
-Active conditions and current medications that are RELEVANT to the referral reason. Do not list every medication — only those that matter for this referral. Include any recent lab results or vital signs that are abnormal or relevant. If screening scores are present and clinically significant, mention them here with interpretation.
+Paragraph 2 — Full clinical picture from the medical record:
+Present ALL active conditions, abnormal vitals, and clinically significant screening scores from the CCD/medical record — not just those related to the referral reason. The CCD is the authoritative source of truth; the referral note may focus on only one aspect of the patient's health. The coordinator needs the complete picture to make safe triage decisions. After presenting the full clinical context, note which findings are directly relevant to the stated referral reason and which are additional but clinically important findings the receiving provider should be aware of. Include current medications that are active. If screening scores are present and clinically significant, mention them here with interpretation.
 
 Paragraph 3 — Significant history (ONLY if applicable):
 Past surgeries, resolved but significant conditions (cancer history, prior MI, etc.), recently stopped medications that matter. Keep to 1-2 sentences. OMIT this paragraph entirely if there is no significant historical context.
