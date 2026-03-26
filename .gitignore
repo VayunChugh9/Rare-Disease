@@ -11,3 +11,5 @@ build/
 reftriage.db
 uploads/
 opencode.json
+node_modules/
+dist/
