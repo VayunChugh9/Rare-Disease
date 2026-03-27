@@ -23,7 +23,7 @@ const cardVariants = {
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.05, duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+    transition: { delay: i * 0.05, duration: 0.3, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
   }),
 };
 
@@ -112,7 +112,7 @@ export function ReviewWorkspace() {
         <AISummaryPanel
           summaryNarrative={data.summary_narrative}
           triageReasoning={triage.reasoning}
-          referralReason={ed.referral?.reason}
+          referralReason={ed.referral?.reason ?? null}
           oneLineSummary={data.one_line_summary}
         />
 
