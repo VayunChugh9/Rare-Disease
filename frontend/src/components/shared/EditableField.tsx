@@ -19,6 +19,7 @@ export function EditableField({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   const [saved, setSaved] = useState(false);
+  const [wasEdited, setWasEdited] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export function EditableField({
     if (draft !== (value ?? "")) {
       onSave(fieldPath, value ?? "", draft);
       setSaved(true);
+      setWasEdited(true);
       setTimeout(() => setSaved(false), 2000);
     }
     setEditing(false);
@@ -50,7 +52,7 @@ export function EditableField({
   }
 
   return (
-    <div className="group flex items-start gap-2 py-1.5">
+    <div className={`group flex items-start gap-2 py-1.5 ${wasEdited ? "border-l-4 border-[#2563EB] pl-2" : ""}`}>
       <span className="min-w-[120px] shrink-0 text-xs font-medium text-slate-500 pt-0.5">
         {label}
       </span>
