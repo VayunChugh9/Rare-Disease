@@ -74,7 +74,7 @@ export function ReferralQueue() {
         </div>
         <button
           onClick={() => navigate("/upload")}
-          className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-700 transition-colors"
+          className="flex items-center gap-2 rounded-lg bg-[#0D9488] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-700 transition-colors"
         >
           <Upload className="h-4 w-4" />
           Upload Referral
@@ -90,7 +90,7 @@ export function ReferralQueue() {
             placeholder="Search referrals..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-stone-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300"
+            className="w-full rounded-lg border border-white/40 bg-slate-50/50 py-2 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300"
           />
         </div>
 
@@ -102,8 +102,8 @@ export function ReferralQueue() {
               onClick={() => setStatusFilter(f.value)}
               className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 statusFilter === f.value
-                  ? "bg-stone-200 text-slate-800"
-                  : "text-slate-500 hover:bg-stone-100"
+                  ? "bg-slate-50/50 text-slate-800"
+                  : "text-slate-500 hover:bg-slate-50/50"
               }`}
             >
               {f.label}
@@ -130,17 +130,17 @@ export function ReferralQueue() {
           action={
             <button
               onClick={() => navigate("/upload")}
-              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+              className="rounded-lg bg-[#0D9488] px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
             >
               Upload Referral
             </button>
           }
         />
       ) : (
-        <div className="rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-white/40 glass shadow-sm overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-stone-100 bg-stone-50/50">
+              <tr className="border-b border-white/40 bg-slate-50/50">
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500">
                   Patient
                 </th>
@@ -163,7 +163,7 @@ export function ReferralQueue() {
                 <tr
                   key={r.referral_id}
                   onClick={() => navigate(`/review/${r.referral_id}`)}
-                  className="border-b border-stone-50 cursor-pointer hover:bg-stone-50/80 transition-colors"
+                  className="border-b border-white/40 cursor-pointer hover:bg-slate-50/50 transition-colors"
                 >
                   <td className="px-4 py-3">
                     <span className="text-sm font-medium text-slate-800">

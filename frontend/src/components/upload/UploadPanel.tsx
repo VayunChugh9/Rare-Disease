@@ -73,7 +73,7 @@ export function UploadPanel() {
           </p>
           <button
             onClick={() => navigate(`/review/${referralId}`)}
-            className="rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-teal-700 transition-colors"
+            className="rounded-lg bg-[#0D9488] px-5 py-2.5 text-sm font-medium text-white hover:bg-teal-700 transition-colors"
           >
             Review Referral
           </button>
@@ -90,7 +90,7 @@ export function UploadPanel() {
                 ? "border-teal-400 bg-teal-50/50"
                 : file
                 ? "border-teal-300 bg-teal-50/30"
-                : "border-stone-300 bg-white hover:border-stone-400"
+                : "border-white/40 bg-slate-50/50 hover:border-slate-300"
             }`}
           >
             {file ? (
@@ -153,13 +153,13 @@ export function UploadPanel() {
                   placeholder="Receiving specialty (e.g., Endocrinology)"
                   value={specialty}
                   onChange={(e) => setSpecialty(e.target.value)}
-                  className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                  className="rounded-lg border border-white/40 bg-slate-50/50 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300"
                 />
                 <input
                   placeholder="Referring provider name"
                   value={providerName}
                   onChange={(e) => setProviderName(e.target.value)}
-                  className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                  className="rounded-lg border border-white/40 bg-slate-50/50 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300"
                 />
               </div>
               <textarea
@@ -167,7 +167,7 @@ export function UploadPanel() {
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={2}
-                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300 resize-none"
+                className="w-full rounded-lg border border-white/40 bg-slate-50/50 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-300 resize-none"
               />
             </div>
           )}
@@ -177,7 +177,7 @@ export function UploadPanel() {
             <button
               onClick={handleSubmit}
               disabled={phase === "uploading" || phase === "processing"}
-              className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg bg-teal-600 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-teal-700 disabled:bg-stone-300 disabled:cursor-not-allowed transition-colors"
+              className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg bg-[#0D9488] py-2.5 text-sm font-medium text-white shadow-sm hover:bg-teal-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
             >
               {phase === "uploading" || phase === "processing" ? (
                 <>
