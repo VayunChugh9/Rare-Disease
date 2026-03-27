@@ -1,14 +1,31 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, FileText, CheckCircle, Download, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
 import { getReferral, saveCorrection } from "../../api/client";
 import type { ReferralDetail } from "../../types/referral";
 import { ReviewSkeleton } from "../shared/LoadingSkeleton";
 import { PatientHeader } from "./PatientHeader";
-import { FindingsPanel } from "./FindingsPanel";
-import { ScreeningGrid } from "./ScreeningCard";
-import { ClinicalSections } from "./ClinicalSections";
-import { TriageBadge } from "../shared/StatusBadge";
+import { AlertStrip } from "./AlertStrip";
+import { ActionChips } from "./ActionChips";
+import { AISummaryPanel } from "./AISummaryPanel";
+import { VitalsCard } from "./VitalsCard";
+import { MedicationsCard } from "./MedicationsCard";
+import { ConditionsCard } from "./ConditionsCard";
+import { LabsCard } from "./LabsCard";
+import { ScreeningScores } from "./ScreeningScores";
+import { SocialHistoryCard } from "./SocialHistoryCard";
+import { AllergiesCard } from "./AllergiesCard";
+import { ClinicalTrialsCard } from "./ClinicalTrialsCard";
+import { HistoricalContext } from "./HistoricalContext";
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.05, duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+  }),
+};
 
 export function ReviewWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -21,10 +38,7 @@ export function ReviewWorkspace() {
     if (!id) return;
     setLoading(true);
     getReferral(id)
-      .then((d) => {
-        setData(d);
-        setError(null);
-      })
+      .then((d) => { setData(d); setError(null); })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id]);
@@ -46,12 +60,16 @@ export function ReviewWorkspace() {
     [id]
   );
 
+  const handleGeneratePdf = useCallback(() => {
+    alert("PDF generation not yet available. Endpoint: GET /api/referrals/{id}/summary-pdf");
+  }, []);
+
+  const handleFinalize = useCallback(() => {
+    alert("Finalize review functionality coming soon.");
+  }, []);
+
   if (loading) {
-    return (
-      <div className="h-full">
-        <ReviewSkeleton />
-      </div>
-    );
+    return <div className="h-full pt-4"><ReviewSkeleton /></div>;
   }
 
   if (error || !data) {
@@ -59,10 +77,7 @@ export function ReviewWorkspace() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-sm text-red-600 mb-2">{error ?? "Referral not found"}</p>
-          <button
-            onClick={() => navigate("/")}
-            className="text-sm text-teal-600 hover:underline"
-          >
+          <button onClick={() => navigate("/queue")} className="text-sm text-[#0D9488] hover:underline">
             Back to queue
           </button>
         </div>
@@ -74,161 +89,66 @@ export function ReviewWorkspace() {
   const cd = ed.clinical_data;
   const triage = data.triage;
 
+  let sectionIndex = 0;
+
   return (
-    <div className="flex h-full flex-col">
-      {/* Patient Header */}
+    <div className="flex flex-col min-h-full">
       <PatientHeader
         patient={ed.patient}
         referral={ed.referral}
         referringProvider={ed.referring_provider}
         status={data.status}
         urgency={triage.urgency}
+        confidence={triage.confidence}
         createdAt={data.created_at}
+        onGeneratePdf={handleGeneratePdf}
+        onFinalize={handleFinalize}
       />
 
-      {/* Split panel */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* LEFT: Source / Summary Narrative */}
-        <div className="w-1/2 border-r border-stone-200 overflow-y-auto bg-stone-50/50">
-          <div className="p-5">
-            {/* Back link */}
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 mb-4"
-            >
-              <ArrowLeft className="h-3 w-3" /> Back to queue
-            </button>
+      <AlertStrip redFlags={triage.red_flags} missingInfo={triage.missing_info} />
+      <ActionChips items={triage.action_items} />
 
-            {/* Summary Narrative */}
-            <div className="rounded-xl border border-stone-200 bg-white p-5 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-4 w-4 text-teal-600" />
-                <h2 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                  AI-Generated Summary
-                </h2>
-                <span className="ml-auto text-[10px] text-slate-400 bg-stone-100 rounded px-1.5 py-0.5">
-                  Review before finalizing
-                </span>
-              </div>
-              {data.summary_narrative ? (
-                <div className="prose prose-sm prose-slate max-w-none">
-                  {data.summary_narrative.split("\n\n").map((para, i) => (
-                    <p key={i} className="text-sm text-slate-700 leading-relaxed mb-3 last:mb-0">
-                      {para}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400 italic">
-                  No summary available
-                </p>
-              )}
+      <div className="flex flex-1 mx-6 mb-6 overflow-hidden">
+        <AISummaryPanel
+          summaryNarrative={data.summary_narrative}
+          triageReasoning={triage.reasoning}
+          referralReason={ed.referral?.reason}
+          oneLineSummary={data.one_line_summary}
+        />
+
+        <div className="flex-1 overflow-y-auto pl-4 space-y-6 pb-8">
+          {/* Section 1: Vitals + Medications */}
+          <motion.div className="flex gap-6" custom={sectionIndex++} initial="hidden" animate="visible" variants={cardVariants}>
+            <div className="w-[55%]"><VitalsCard vitals={cd?.recent_vitals} /></div>
+            <div className="w-[45%]"><MedicationsCard medications={cd?.medications} /></div>
+          </motion.div>
+
+          {/* Section 2: Conditions + Labs */}
+          <motion.div className="flex gap-6" custom={sectionIndex++} initial="hidden" animate="visible" variants={cardVariants}>
+            <div className="w-[50%]">
+              <ConditionsCard conditions={cd?.problem_list?.active ?? []} receivingSpecialty={ed.referral?.receiving_specialty} />
             </div>
+            <div className="w-[50%]"><LabsCard labs={cd?.recent_labs} /></div>
+          </motion.div>
 
-            {/* Triage Rationale */}
-            <div className="rounded-xl border border-stone-200 bg-white p-5 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                  Triage Recommendation
-                </h2>
-              </div>
-              <div className="flex items-start gap-3">
-                <TriageBadge urgency={triage.urgency} />
-                <div className="flex-1">
-                  {triage.confidence && (
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className="h-1.5 flex-1 max-w-[120px] rounded-full bg-stone-200">
-                        <div
-                          className="h-1.5 rounded-full bg-teal-500"
-                          style={{ width: `${triage.confidence * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] text-slate-400">
-                        {Math.round(triage.confidence * 100)}% confidence
-                      </span>
-                    </div>
-                  )}
-                  {triage.reasoning && (
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      {triage.reasoning}
-                    </p>
-                  )}
-                </div>
-              </div>
+          {/* Section 3: Screening Scores */}
+          <motion.div custom={sectionIndex++} initial="hidden" animate="visible" variants={cardVariants}>
+            <ScreeningScores screenings={cd?.screenings} />
+          </motion.div>
+
+          {/* Section 4: Social + Allergies + Trials */}
+          <motion.div className="grid grid-cols-10 gap-6" custom={sectionIndex++} initial="hidden" animate="visible" variants={cardVariants}>
+            <div className="col-span-4"><SocialHistoryCard socialHistory={cd?.social_history} /></div>
+            <div className="col-span-3"><AllergiesCard allergies={cd?.allergies} /></div>
+            <div className="col-span-3">
+              <ClinicalTrialsCard flagged={data.clinical_trial_flagged} signals={data.clinical_trial_signals} />
             </div>
+          </motion.div>
 
-            {/* Source Document Info */}
-            <div className="rounded-xl border border-stone-200 bg-white p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="h-4 w-4 text-slate-400" />
-                <h2 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                  Source Document
-                </h2>
-              </div>
-              <div className="text-xs text-slate-500 space-y-1">
-                {ed.extraction_metadata?.extraction_path && (
-                  <p>
-                    <span className="text-slate-600 font-medium">Extraction:</span>{" "}
-                    {ed.extraction_metadata.extraction_path === "structured_parse"
-                      ? "CCD/CCDA structured parse (deterministic)"
-                      : "LLM extraction"}
-                  </p>
-                )}
-                {ed.extraction_metadata?.sections_found && (
-                  <p>
-                    <span className="text-slate-600 font-medium">Sections found:</span>{" "}
-                    {ed.extraction_metadata.sections_found.join(", ")}
-                  </p>
-                )}
-                {ed.extraction_metadata?.sections_missing &&
-                  ed.extraction_metadata.sections_missing.length > 0 && (
-                    <p className="text-amber-600">
-                      <span className="font-medium">Missing sections:</span>{" "}
-                      {ed.extraction_metadata.sections_missing.join(", ")}
-                    </p>
-                  )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT: Structured Review */}
-        <div className="w-1/2 overflow-y-auto">
-          <div className="p-5 space-y-4">
-            {/* Key Findings */}
-            <FindingsPanel
-              redFlags={triage.red_flags}
-              actionItems={triage.action_items}
-              missingInfo={triage.missing_info}
-            />
-
-            {/* Screenings */}
-            {cd?.screenings && cd.screenings.length > 0 && (
-              <div>
-                <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">
-                  Screening Scores
-                </h3>
-                <ScreeningGrid screenings={cd.screenings} />
-              </div>
-            )}
-
-            {/* Clinical Data Sections */}
-            {cd && (
-              <ClinicalSections data={cd} onCorrection={handleCorrection} />
-            )}
-
-            {/* Action Bar */}
-            <div className="flex items-center gap-3 pt-2 pb-4">
-              <button className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-teal-700 transition-colors">
-                <CheckCircle className="h-4 w-4" />
-                Finalize Review
-              </button>
-              <button className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-stone-50 transition-colors">
-                <Download className="h-4 w-4" />
-                Download PDF
-              </button>
-            </div>
-          </div>
+          {/* Section 5: Historical Context */}
+          <motion.div custom={sectionIndex++} initial="hidden" animate="visible" variants={cardVariants}>
+            <HistoricalContext significantHistory={cd?.problem_list?.significant_history} procedures={cd?.procedures_and_surgeries} />
+          </motion.div>
         </div>
       </div>
     </div>
