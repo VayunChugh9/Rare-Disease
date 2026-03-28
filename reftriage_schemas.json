@@ -1,0 +1,541 @@
+{
+  "_meta": {
+    "description": "RefTriage data schemas — all JSON structures and database definitions for MVP",
+    "version": "1.0.0",
+    "generated": "2026-03-25"
+  },
+
+  "1_canonical_output_schema": {
+    "_description": "The single target schema both extraction paths produce. Every downstream component (summarization, UI, PDF, corrections) references this structure. Fields are nullable unless marked required.",
+
+    "referral_id": "uuid — system generated, required",
+    "ingested_at": "ISO-8601, required",
+
+    "source_documents": [
+      {
+        "id": "uuid",
+        "filename": "string",
+        "format": "ccda_xml | fhir_json | pdf_typed | pdf_scanned | pdf_handwritten | plain_text",
+        "extraction_path": "structured_parse | llm_extraction",
+        "page_count": "int | null"
+      }
+    ],
+
+    "patient": {
+      "first_name": "string | null",
+      "last_name": "string | null",
+      "date_of_birth": "YYYY-MM-DD | null",
+      "age": "int | null — calculated from DOB",
+      "sex": "M | F | Other | null",
+      "race": "string | null",
+      "ethnicity": "string | null",
+      "language": "string | null",
+      "mrn": "string | null",
+      "insurance": {
+        "plan_name": "string | null",
+        "member_id": "string | null",
+        "group_number": "string | null"
+      },
+      "contact": {
+        "phone": "string | null",
+        "address": {
+          "street": "string | null",
+          "city": "string | null",
+          "state": "string | null",
+          "zip": "string | null"
+        }
+      }
+    },
+
+    "referring_provider": {
+      "name": "string | null",
+      "npi": "string | null",
+      "practice_name": "string | null",
+      "phone": "string | null",
+      "fax": "string | null",
+      "address": "string | null"
+    },
+
+    "referral": {
+      "receiving_specialty": "string | null",
+      "receiving_provider": "string | null",
+      "reason": "string | null",
+      "clinical_question": "string | null",
+      "urgency_stated": "string | null",
+      "date_of_referral": "YYYY-MM-DD | null"
+    },
+
+    "clinical_data": {
+      "problem_list": {
+        "active": [
+          {
+            "diagnosis": "string",
+            "code": "string | null",
+            "code_system": "SNOMED | ICD-10 | null",
+            "onset_date": "YYYY-MM-DD | null"
+          }
+        ],
+        "significant_history": [
+          {
+            "diagnosis": "string",
+            "code": "string | null",
+            "code_system": "SNOMED | ICD-10 | null",
+            "onset_date": "YYYY-MM-DD | null",
+            "resolution_date": "YYYY-MM-DD | null",
+            "significance_reason": "string"
+          }
+        ]
+      },
+
+      "medications": {
+        "active": [
+          {
+            "name": "string",
+            "dose": "string | null",
+            "frequency": "string | null",
+            "rxnorm": "string | null",
+            "first_prescribed": "YYYY-MM-DD | null",
+            "source": "string"
+          }
+        ],
+        "recently_stopped": [
+          {
+            "name": "string",
+            "dose": "string | null",
+            "rxnorm": "string | null",
+            "stop_date": "YYYY-MM-DD | null",
+            "duration_on_med": "string | null",
+            "reason_stopped": "string | null"
+          }
+        ]
+      },
+
+      "allergies": {
+        "known_allergies": [
+          {
+            "substance": "string",
+            "reaction": "string | null",
+            "severity": "string | null"
+          }
+        ],
+        "no_known_allergies": "boolean"
+      },
+
+      "recent_labs": [
+        {
+          "panel_name": "string | null",
+          "panel_loinc": "string | null",
+          "date": "YYYY-MM-DD",
+          "results": [
+            {
+              "test_name": "string",
+              "loinc": "string | null",
+              "value": "string",
+              "unit": "string | null",
+              "flag": "normal | abnormal | critical | null",
+              "prior_value": "string | null",
+              "prior_date": "YYYY-MM-DD | null"
+            }
+          ]
+        }
+      ],
+
+      "recent_vitals": {
+        "date": "YYYY-MM-DD | null",
+        "height": "string | null",
+        "weight": "string | null",
+        "bmi": "string | null",
+        "heart_rate": "string | null",
+        "respiratory_rate": "string | null",
+        "blood_pressure": "string | null",
+        "temperature": "string | null",
+        "pain_score": "string | null",
+        "oxygen_saturation": "string | null",
+        "trends": {
+          "weight_3_visits": ["string"],
+          "bp_3_visits": ["string"],
+          "a1c_3_visits": ["string"]
+        }
+      },
+
+      "screenings": [
+        {
+          "instrument": "string",
+          "score": "string",
+          "interpretation": "string | null",
+          "date": "YYYY-MM-DD",
+          "screening_type": "mental_health | substance_use | safety | cognitive | functional"
+        }
+      ],
+
+      "procedures_and_surgeries": [
+        {
+          "description": "string",
+          "code": "string | null",
+          "code_system": "SNOMED | CPT | null",
+          "date": "YYYY-MM-DD | null",
+          "is_surgical": "boolean"
+        }
+      ],
+
+      "social_history": {
+        "smoking_status": "string | null",
+        "alcohol_use": "string | null",
+        "substance_use": "string | null",
+        "employment": "string | null",
+        "education": "string | null",
+        "housing": "string | null",
+        "safety_concerns": "string | null",
+        "other": "string | null"
+      },
+
+      "immunizations_summary": "string | null"
+    },
+
+    "triage": {
+      "urgency": "urgent | semi_urgent | routine | needs_clarification | inappropriate",
+      "confidence": "0.0–1.0",
+      "reasoning": "string",
+      "red_flags": ["string"],
+      "missing_critical_info": ["string"],
+      "data_quality_notes": ["string"]
+    },
+
+    "clinical_trial_relevance": {
+      "potentially_eligible": "boolean",
+      "signals": [
+        {
+          "signal_type": "diagnosis | biomarker | medication | demographic | lab_value",
+          "detail": "string — what was detected",
+          "source_field": "string — JSON path to the triggering data"
+        }
+      ],
+      "suggested_search_terms": ["string — terms a coordinator could use to look up trials"]
+    },
+
+    "extraction_metadata": {
+      "extraction_path": "structured_parse | llm_extraction | hybrid",
+      "ocr_confidence_mean": "float | null",
+      "ocr_low_confidence_regions": ["string"],
+      "extraction_model": "string | null",
+      "extraction_timestamp": "ISO-8601",
+      "sections_found": ["string"],
+      "sections_missing": ["string"]
+    }
+  },
+
+  "2_ccd_intermediate_schema": {
+    "_description": "Raw parsed output from the CCD/CCDA XML parser BEFORE recency filtering. Contains all data from the document organized by section. This is the input to the recency filter, which then produces a subset that maps to the canonical schema.",
+
+    "document_id": "uuid",
+    "document_date": "ISO-8601 — effectiveTime of the CCD",
+    "source_organization": {
+      "name": "string | null",
+      "address": "string | null",
+      "phone": "string | null"
+    },
+
+    "patient": {
+      "first_name": "string | null",
+      "last_name": "string | null",
+      "dob_raw": "string — HL7 format YYYYMMDDHHMMSS",
+      "dob_parsed": "YYYY-MM-DD | null",
+      "sex": "string | null",
+      "race": "string | null",
+      "ethnicity": "string | null",
+      "language": "string | null",
+      "mrn": "string | null",
+      "address": {
+        "street": "string | null",
+        "city": "string | null",
+        "state": "string | null",
+        "zip": "string | null"
+      },
+      "phone": "string | null"
+    },
+
+    "allergies": {
+      "no_known_allergies": "boolean",
+      "entries": [
+        {
+          "substance": "string",
+          "substance_code": "string | null",
+          "code_system": "string | null",
+          "reaction": "string | null",
+          "severity": "string | null",
+          "status": "active | inactive | null"
+        }
+      ]
+    },
+
+    "medications_all": [
+      {
+        "name": "string",
+        "code": "string | null",
+        "code_system": "RxNorm | null",
+        "start_date_raw": "string",
+        "start_date_parsed": "YYYY-MM-DD | null",
+        "stop_date_raw": "string | null",
+        "stop_date_parsed": "YYYY-MM-DD | null",
+        "is_active": "boolean — inferred from stop_date"
+      }
+    ],
+
+    "conditions_all": [
+      {
+        "description": "string",
+        "code": "string | null",
+        "code_system": "SNOMED | ICD-10 | null",
+        "onset_date_raw": "string | null",
+        "onset_date_parsed": "YYYY-MM-DD | null",
+        "resolution_date_raw": "string | null",
+        "resolution_date_parsed": "YYYY-MM-DD | null",
+        "is_active": "boolean",
+        "is_clinical": "boolean — false for employment, education, medication review entries"
+      }
+    ],
+
+    "lab_results_all": [
+      {
+        "panel_name": "string",
+        "panel_loinc": "string",
+        "date_raw": "string",
+        "date_parsed": "YYYY-MM-DD",
+        "components": [
+          {
+            "test_name": "string",
+            "loinc": "string",
+            "value": "number | string",
+            "unit": "string",
+            "date_raw": "string",
+            "date_parsed": "YYYY-MM-DD"
+          }
+        ]
+      }
+    ],
+
+    "vitals_all": [
+      {
+        "measure": "string",
+        "loinc": "string",
+        "value": "string",
+        "unit": "string",
+        "date_raw": "string",
+        "date_parsed": "YYYY-MM-DD"
+      }
+    ],
+
+    "procedures_all": [
+      {
+        "description": "string",
+        "code": "string | null",
+        "code_system": "SNOMED | CPT | null",
+        "start_date_parsed": "YYYY-MM-DD | null",
+        "end_date_parsed": "YYYY-MM-DD | null"
+      }
+    ],
+
+    "encounters_all": [
+      {
+        "description": "string",
+        "code": "string | null",
+        "start_date_parsed": "YYYY-MM-DD | null",
+        "end_date_parsed": "YYYY-MM-DD | null",
+        "provider": "string | null",
+        "location": "string | null"
+      }
+    ],
+
+    "social_history": {
+      "smoking_status": "string | null",
+      "smoking_snomed": "string | null",
+      "smoking_date": "YYYY-MM-DD | null"
+    },
+
+    "immunizations_all": [
+      {
+        "vaccine": "string",
+        "code": "string | null",
+        "date_parsed": "YYYY-MM-DD | null",
+        "status": "completed | refused | null"
+      }
+    ],
+
+    "functional_status_all": [
+      {
+        "instrument": "string",
+        "loinc": "string | null",
+        "score": "string",
+        "unit": "string | null",
+        "date_parsed": "YYYY-MM-DD"
+      }
+    ],
+
+    "care_plan_all": [
+      {
+        "description": "string",
+        "code": "string | null",
+        "status": "active | completed | null",
+        "date_parsed": "YYYY-MM-DD | null"
+      }
+    ]
+  },
+
+  "3_recency_filter_config": {
+    "_description": "Configuration for the recency filter that transforms CCD intermediate schema into the canonical schema's clinical_data section. Defines time windows, tier classification rules, deduplication logic, and always-surface criteria.",
+
+    "time_windows": {
+      "labs_recent_months": 12,
+      "encounters_recent_months": 6,
+      "medications_recently_stopped_months": 6,
+      "vitals_most_recent_sets": 1,
+      "vitals_trend_sets": 3
+    },
+
+    "tier_1_current_rules": [
+      "Medications with no stop_date or stop_date > now",
+      "Conditions with no resolution_date",
+      "Most recent complete vital signs set",
+      "Lab panels from within labs_recent_months",
+      "Encounters from within encounters_recent_months",
+      "Active allergies",
+      "Active care plan items"
+    ],
+
+    "tier_2_always_surface_keywords": [
+      "cancer", "malignant", "carcinoma", "tumor", "metast", "neoplasm", "lymphoma", "leukemia", "melanoma",
+      "stroke", "CVA", "TIA", "cerebrovascular",
+      "myocardial infarction", "MI", "STEMI", "NSTEMI", "heart attack",
+      "transplant",
+      "HIV", "AIDS",
+      "hepatitis B", "hepatitis C", "HBV", "HCV",
+      "seizure", "epilepsy",
+      "anaphylaxis",
+      "pulmonary embolism", "PE", "DVT", "deep vein thrombosis",
+      "suicide", "self-harm", "overdose",
+      "fracture", "amputation"
+    ],
+
+    "tier_2_always_surface_medication_classes": [
+      "chemotherapy", "antineoplastic",
+      "anticoagulant", "warfarin", "heparin", "apixaban", "rivaroxaban",
+      "immunosuppressant", "tacrolimus", "cyclosporine", "mycophenolate",
+      "opioid", "morphine", "oxycodone", "fentanyl", "hydrocodone", "methadone", "buprenorphine",
+      "insulin",
+      "antipsychotic", "lithium", "clozapine",
+      "biologic", "adalimumab", "infliximab", "rituximab"
+    ],
+
+    "tier_2_screening_thresholds": {
+      "GAD-7": { "concerning_score": 10, "label": "moderate or higher anxiety" },
+      "PHQ-2": { "concerning_score": 3, "label": "positive depression screen" },
+      "PHQ-9": { "concerning_score": 10, "label": "moderate or higher depression" },
+      "AUDIT-C": { "concerning_score_male": 4, "concerning_score_female": 3, "label": "positive alcohol screen" },
+      "DAST-10": { "concerning_score": 3, "label": "moderate or higher drug problems" },
+      "HARK": { "concerning_score": 1, "label": "positive IPV screen" }
+    },
+
+    "filter_out_snomed_codes": {
+      "160903007": "Full-time employment",
+      "160904001": "Part-time employment",
+      "473461003": "Education level",
+      "314529007": "Medication review due",
+      "105480006": "Refusal of treatment (administrative)",
+      "160245001": "No current problems or disability",
+      "266919005": "Never smoked (goes to social_history, not problem_list)"
+    },
+
+    "deduplication_rules": {
+      "medications": "Collapse consecutive entries with same drug name + dose into single entry with first_prescribed = earliest start_date. Keep only distinct drug+dose combinations.",
+      "conditions": "Deduplicate by SNOMED code. If same condition appears multiple times, keep only the instance with the earliest onset_date and latest resolution_date (or no resolution if any instance is active).",
+      "vitals": "Group by date. Keep only the most recent complete set for display. For trending, keep the last N sets as configured in vitals_trend_sets.",
+      "labs": "For recurring panel types (same LOINC), keep only the most recent result. If a value changed >20% from the prior result, include the prior value in prior_value field for trending context.",
+      "encounters": "No dedup needed — just filter by recency window.",
+      "procedures": "Filter out non-surgical assessments and screenings (route screening results to functional_status instead). Keep actual procedures and surgeries regardless of date."
+    }
+  },
+
+  "4_correction_record_schema": {
+    "_description": "Captured automatically when a coordinator edits any field in the review UI. No extra modal or confirmation — silent capture on save.",
+
+    "id": "uuid",
+    "referral_id": "uuid — FK to referrals table",
+    "field_path": "string — dot-notation JSON path, e.g. 'clinical_data.medications.active[0].dose' or 'triage.urgency'",
+    "original_value": "any — the value before the edit",
+    "corrected_value": "any — the value after the edit",
+    "correction_type": "value_change | field_added | field_removed | triage_override",
+    "corrected_by": "uuid | null — FK to users table (post-MVP)",
+    "corrected_at": "ISO-8601",
+    "correction_reason": "string | null — optional free text"
+  },
+
+  "5_patient_trajectory_schema": {
+    "_description": "De-identified record created when a referral is finalized. No PHI — only hashed identifier and categorical clinical data. This is the primary dataset for acquisition value.",
+
+    "id": "uuid",
+    "patient_hash": "string — SHA-256(salt + first_name + last_name + DOB)",
+    "referral_id": "uuid — FK to referrals table",
+    "encounter_date": "YYYY-MM-DD",
+    "referring_specialty": "string | null",
+    "receiving_specialty": "string | null",
+    "triage_urgency": "string",
+    "triage_confidence": "float",
+    "referral_reason_category": "string — normalized category, not free text",
+    "primary_diagnosis_snomed": "string | null",
+    "active_condition_count": "int",
+    "active_medication_count": "int",
+    "has_red_flags": "boolean",
+    "clinical_trial_flagged": "boolean",
+    "trial_signal_types": ["string"],
+    "correction_count": "int — number of corrections made during review",
+    "corrected_fields": ["string — list of field_paths that were corrected"],
+    "outcome": "seen | no_show | redirected | cancelled | null — populated later",
+    "days_to_appointment": "int | null — populated later",
+    "created_at": "ISO-8601"
+  },
+
+  "6_summary_output_schema": {
+    "_description": "The JSON structure returned by the summarization + triage LLM call. This is what the LLM produces from the canonical schema, NOT what the coordinator sees directly (the UI renders both the canonical data and this summary).",
+
+    "one_line_summary": "string — single sentence capturing the essence of this referral",
+
+    "summary_narrative": "string — 2-4 paragraph clinical summary following the structure: (1) patient snapshot + referral reason, (2) relevant clinical context, (3) significant history if applicable, (4) gaps and next steps",
+
+    "triage_recommendation": {
+      "urgency": "urgent | semi_urgent | routine | needs_clarification | inappropriate",
+      "confidence": "0.0–1.0",
+      "reasoning": "string — 1-2 sentences",
+      "red_flags": ["string"],
+      "action_items": ["string — things the coordinator should do next"]
+    },
+
+    "clinical_trial_relevance": {
+      "potentially_eligible": "boolean",
+      "signals": [
+        {
+          "signal_type": "diagnosis | biomarker | medication | demographic | lab_value",
+          "detail": "string",
+          "source_field": "string"
+        }
+      ],
+      "suggested_search_terms": ["string"]
+    },
+
+    "missing_information": ["string — clinically important data not found"],
+
+    "screening_interpretations": [
+      {
+        "instrument": "string",
+        "score": "string",
+        "interpretation": "string",
+        "clinical_significance": "none | mild | moderate | severe"
+      }
+    ]
+  },
+
+  "7_database_ddl": {
+    "_description": "PostgreSQL table definitions. Copy this SQL directly to initialize the database.",
+
+    "sql": "-- RefTriage Database Schema\n\nCREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n\nCREATE TABLE source_documents (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    storage_key TEXT NOT NULL,\n    original_filename TEXT,\n    mime_type TEXT,\n    file_size_bytes BIGINT,\n    document_format TEXT NOT NULL CHECK (document_format IN ('ccda_xml', 'fhir_json', 'pdf_typed', 'pdf_scanned', 'pdf_handwritten', 'plain_text')),\n    extraction_path TEXT NOT NULL CHECK (extraction_path IN ('structured_parse', 'llm_extraction')),\n    ocr_text TEXT,\n    ocr_confidence_mean FLOAT,\n    sections_found TEXT[],\n    uploaded_at TIMESTAMPTZ DEFAULT now(),\n    uploaded_by UUID\n);\n\nCREATE TABLE referrals (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    source_document_ids UUID[] NOT NULL,\n    extracted_data JSONB NOT NULL,\n    summary_narrative TEXT,\n    one_line_summary TEXT,\n    triage_urgency TEXT NOT NULL CHECK (triage_urgency IN ('urgent', 'semi_urgent', 'routine', 'needs_clarification', 'inappropriate')),\n    triage_confidence FLOAT NOT NULL,\n    triage_reasoning TEXT,\n    triage_red_flags TEXT[],\n    triage_missing_info TEXT[],\n    triage_action_items TEXT[],\n    clinical_trial_flagged BOOLEAN DEFAULT false,\n    clinical_trial_signals JSONB,\n    status TEXT DEFAULT 'pending_review' CHECK (status IN ('processing', 'pending_review', 'reviewed', 'finalized', 'archived')),\n    created_at TIMESTAMPTZ DEFAULT now(),\n    reviewed_at TIMESTAMPTZ,\n    reviewed_by UUID,\n    finalized_at TIMESTAMPTZ,\n    summary_pdf_key TEXT\n);\n\nCREATE TABLE corrections (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    referral_id UUID NOT NULL REFERENCES referrals(id) ON DELETE CASCADE,\n    field_path TEXT NOT NULL,\n    original_value JSONB,\n    corrected_value JSONB,\n    correction_type TEXT NOT NULL CHECK (correction_type IN ('value_change', 'field_added', 'field_removed', 'triage_override')),\n    corrected_by UUID,\n    corrected_at TIMESTAMPTZ DEFAULT now(),\n    correction_reason TEXT\n);\n\nCREATE TABLE patient_trajectories (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    patient_hash TEXT NOT NULL,\n    referral_id UUID NOT NULL REFERENCES referrals(id),\n    encounter_date DATE,\n    referring_specialty TEXT,\n    receiving_specialty TEXT,\n    triage_urgency TEXT,\n    triage_confidence FLOAT,\n    referral_reason_category TEXT,\n    primary_diagnosis_snomed TEXT,\n    active_condition_count INT,\n    active_medication_count INT,\n    has_red_flags BOOLEAN DEFAULT false,\n    clinical_trial_flagged BOOLEAN DEFAULT false,\n    trial_signal_types TEXT[],\n    correction_count INT DEFAULT 0,\n    corrected_fields TEXT[],\n    outcome TEXT CHECK (outcome IN ('seen', 'no_show', 'redirected', 'cancelled') OR outcome IS NULL),\n    days_to_appointment INT,\n    created_at TIMESTAMPTZ DEFAULT now()\n);\n\nCREATE TABLE audit_log (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    action TEXT NOT NULL,\n    resource_type TEXT NOT NULL,\n    resource_id UUID NOT NULL,\n    user_id UUID,\n    ip_address INET,\n    user_agent TEXT,\n    details JSONB,\n    created_at TIMESTAMPTZ DEFAULT now()\n);\n\n-- Indexes\nCREATE INDEX idx_referrals_status ON referrals(status);\nCREATE INDEX idx_referrals_triage ON referrals(triage_urgency);\nCREATE INDEX idx_referrals_created ON referrals(created_at);\nCREATE INDEX idx_referrals_trial ON referrals(clinical_trial_flagged) WHERE clinical_trial_flagged = true;\nCREATE INDEX idx_corrections_referral ON corrections(referral_id);\nCREATE INDEX idx_trajectories_patient ON patient_trajectories(patient_hash);\nCREATE INDEX idx_trajectories_specialty ON patient_trajectories(receiving_specialty);\nCREATE INDEX idx_trajectories_trial ON patient_trajectories(clinical_trial_flagged) WHERE clinical_trial_flagged = true;\nCREATE INDEX idx_audit_resource ON audit_log(resource_type, resource_id);\nCREATE INDEX idx_audit_created ON audit_log(created_at);"
+  }
+}

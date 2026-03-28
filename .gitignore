@@ -1,11 +1,15 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# Data
-data/
-artifacts/
-
-# Env
 .env
+__pycache__/
+node_modules/
+venv/
+.DS_Store
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+reftriage.db
+uploads/
+opencode.json
+node_modules/
+dist/
