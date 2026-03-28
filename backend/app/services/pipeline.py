@@ -58,15 +58,19 @@ def process_referral(
     filename: str,
     content_bytes: bytes,
     *,
+    hie_filename: Optional[str] = None,
+    hie_content_bytes: Optional[bytes] = None,
     referral_info: Optional[dict] = None,
     referring_provider: Optional[dict] = None,
 ) -> str:
-    """Process a single referral document end-to-end.
+    """Process referral document(s) end-to-end.
 
     Args:
         db: Database session.
-        filename: Original filename.
-        content_bytes: Raw file bytes.
+        filename: Original filename of referral note.
+        content_bytes: Raw file bytes of referral note.
+        hie_filename: Optional HIE/CCDA filename.
+        hie_content_bytes: Optional HIE/CCDA file bytes.
         referral_info: Optional dict with referral context (specialty, reason, etc.).
         referring_provider: Optional dict with referring provider info.
 
@@ -74,33 +78,46 @@ def process_referral(
         Referral ID (UUID string) for status polling.
     """
     referral_id = str(uuid.uuid4())
-    doc_format = detect_format(filename, content_bytes)
-    extraction_path = (
-        "structured_parse" if doc_format == "ccda_xml" else "llm_extraction"
-    )
-
-    # --- Step 1: Store source document ---
-    storage_key = f"{referral_id}/{filename}"
     storage_path = UPLOAD_DIR / referral_id
     storage_path.mkdir(parents=True, exist_ok=True)
-    (storage_path / filename).write_bytes(content_bytes)
 
-    doc_id = str(uuid.uuid4())
-    doc_row = SourceDocumentRow(
-        id=doc_id,
-        storage_key=storage_key,
-        original_filename=filename,
-        mime_type=_guess_mime(filename),
-        file_size_bytes=len(content_bytes),
-        document_format=doc_format,
-        extraction_path=extraction_path,
-    )
-    db.add(doc_row)
+    doc_ids = []
+
+    # Store referral note if provided
+    if content_bytes:
+        doc_format = detect_format(filename, content_bytes)
+        (storage_path / filename).write_bytes(content_bytes)
+        doc_id = str(uuid.uuid4())
+        db.add(SourceDocumentRow(
+            id=doc_id,
+            storage_key=f"{referral_id}/{filename}",
+            original_filename=filename,
+            mime_type=_guess_mime(filename),
+            file_size_bytes=len(content_bytes),
+            document_format=doc_format,
+            extraction_path="llm_extraction" if doc_format != "ccda_xml" else "structured_parse",
+        ))
+        doc_ids.append(doc_id)
+
+    # Store HIE/CCDA file if provided
+    if hie_content_bytes and hie_filename:
+        (storage_path / hie_filename).write_bytes(hie_content_bytes)
+        hie_doc_id = str(uuid.uuid4())
+        db.add(SourceDocumentRow(
+            id=hie_doc_id,
+            storage_key=f"{referral_id}/{hie_filename}",
+            original_filename=hie_filename,
+            mime_type=_guess_mime(hie_filename),
+            file_size_bytes=len(hie_content_bytes),
+            document_format="ccda_xml",
+            extraction_path="structured_parse",
+        ))
+        doc_ids.append(hie_doc_id)
 
     # Create referral row in "processing" status
     ref_row = ReferralRow(
         id=referral_id,
-        source_document_ids=[doc_id],
+        source_document_ids=doc_ids,
         extracted_data={},
         triage_urgency="needs_clarification",
         triage_confidence=0.0,
@@ -109,14 +126,30 @@ def process_referral(
     db.add(ref_row)
     db.commit()
 
-    logger.info("Referral %s: processing %s (%s)", referral_id, filename, doc_format)
+    logger.info("Referral %s: processing (note=%s, hie=%s)", referral_id, filename, hie_filename)
 
     try:
         # --- Step 2: Parse/Extract ---
-        if doc_format == "ccda_xml":
+        canonical = None
+
+        # Process HIE/CCDA first (structured data)
+        if hie_content_bytes and hie_filename:
+            canonical = _process_ccda(hie_content_bytes, hie_filename)
+
+        # Process referral note (unstructured)
+        if content_bytes and detect_format(filename, content_bytes) != "ccda_xml":
+            note_canonical = _process_unstructured(content_bytes, filename)
+            if canonical:
+                # Merge: note data fills gaps in CCDA data
+                canonical = _merge_canonical(canonical, note_canonical)
+            else:
+                canonical = note_canonical
+        elif content_bytes and not canonical:
+            # Only file is CCDA
             canonical = _process_ccda(content_bytes, filename)
-        else:
-            canonical = _process_unstructured(content_bytes, filename)
+
+        if not canonical:
+            raise ValueError("No processable content found")
 
         # --- Step 2b: Inject referral context if provided ---
         if referral_info:
@@ -153,6 +186,30 @@ def process_referral(
     return referral_id
 
 
+def _merge_canonical(primary: CanonicalReferral, secondary: CanonicalReferral) -> CanonicalReferral:
+    """Merge two canonical referrals. Primary (CCDA) is authoritative; secondary (note) fills gaps."""
+    # Fill missing top-level fields from secondary
+    if not primary.referral and secondary.referral:
+        primary.referral = secondary.referral
+    elif primary.referral and secondary.referral:
+        # Merge referral fields
+        for field in ("receiving_specialty", "reason", "clinical_question", "urgency_stated"):
+            if not getattr(primary.referral, field) and getattr(secondary.referral, field):
+                setattr(primary.referral, field, getattr(secondary.referral, field))
+
+    if not primary.referring_provider and secondary.referring_provider:
+        primary.referring_provider = secondary.referring_provider
+
+    if not primary.patient and secondary.patient:
+        primary.patient = secondary.patient
+    elif primary.patient and secondary.patient:
+        for field in ("age", "insurance"):
+            if not getattr(primary.patient, field) and getattr(secondary.patient, field):
+                setattr(primary.patient, field, getattr(secondary.patient, field))
+
+    return primary
+
+
 def _process_ccda(content_bytes: bytes, filename: str) -> CanonicalReferral:
     """Path A: Deterministic CCD/CCDA XML parse → filter → canonical."""
     intermediate = parse_ccda(content_bytes)
@@ -181,7 +238,8 @@ def _store_results(
 
     tr = summary.triage_recommendation
     if tr:
-        ref_row.triage_urgency = tr.urgency or "needs_clarification"
+        raw_urgency = (tr.urgency or "needs_clarification").strip().lower().replace("-", "_").replace(" ", "_")
+        ref_row.triage_urgency = raw_urgency
         ref_row.triage_confidence = tr.confidence or 0.0
         ref_row.triage_reasoning = tr.reasoning
         ref_row.triage_red_flags = tr.red_flags

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { getReferral, saveCorrection } from "../../api/client";
+import { getReferral, getReferralStatus, saveCorrection, generatePdf, finalizeReferral } from "../../api/client";
 import type { ReferralDetail } from "../../types/referral";
 import { ReviewSkeleton } from "../shared/LoadingSkeleton";
 import { PatientHeader } from "./PatientHeader";
@@ -33,15 +33,38 @@ export function ReviewWorkspace() {
   const [data, setData] = useState<ReferralDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
 
-  useEffect(() => {
+  const fetchReferral = useCallback(() => {
     if (!id) return;
-    setLoading(true);
     getReferral(id)
       .then((d) => { setData(d); setError(null); })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchReferral();
+  }, [fetchReferral]);
+
+  // Poll for status when referral is still processing
+  useEffect(() => {
+    if (!id || !data || data.status !== "processing") return;
+    const interval = setInterval(async () => {
+      try {
+        const status = await getReferralStatus(id);
+        if (status.status !== "processing") {
+          clearInterval(interval);
+          fetchReferral();
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [id, data?.status, fetchReferral]);
 
   const handleCorrection = useCallback(
     async (fieldPath: string, oldValue: string, newValue: string) => {
@@ -60,13 +83,30 @@ export function ReviewWorkspace() {
     [id]
   );
 
-  const handleGeneratePdf = useCallback(() => {
-    alert("PDF generation not yet available. Endpoint: GET /api/referrals/{id}/summary-pdf");
-  }, []);
+  const handleGeneratePdf = useCallback(async () => {
+    if (!id) return;
+    setPdfLoading(true);
+    try {
+      await generatePdf(id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "PDF generation failed");
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [id]);
 
-  const handleFinalize = useCallback(() => {
-    alert("Finalize review functionality coming soon.");
-  }, []);
+  const handleFinalize = useCallback(async () => {
+    if (!id) return;
+    setFinalizing(true);
+    try {
+      await finalizeReferral(id);
+      fetchReferral(); // refresh to show updated status
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Finalize failed");
+    } finally {
+      setFinalizing(false);
+    }
+  }, [id, fetchReferral]);
 
   if (loading) {
     return <div className="h-full pt-4"><ReviewSkeleton /></div>;
@@ -85,6 +125,19 @@ export function ReviewWorkspace() {
     );
   }
 
+  if (data.status === "processing") {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#0D9488]" />
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">Processing Referral</h2>
+          <p className="text-sm text-slate-500">Extracting clinical data and generating AI summary...</p>
+          <p className="text-xs text-slate-400 mt-2">This page will update automatically.</p>
+        </div>
+      </div>
+    );
+  }
+
   const ed = data.extracted_data;
   const cd = ed.clinical_data;
   const triage = data.triage;
@@ -92,7 +145,7 @@ export function ReviewWorkspace() {
   let sectionIndex = 0;
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col">
       <PatientHeader
         patient={ed.patient}
         referral={ed.referral}
@@ -103,12 +156,25 @@ export function ReviewWorkspace() {
         createdAt={data.created_at}
         onGeneratePdf={handleGeneratePdf}
         onFinalize={handleFinalize}
+        pdfLoading={pdfLoading}
+        finalizing={finalizing}
+        clinicalTrialFlagged={data.clinical_trial_flagged}
       />
+
+      {/* Referral Reason - most prominent, above everything */}
+      {ed.referral?.reason && (
+        <div className="mx-6 mb-4">
+          <div className="glass rounded-xl p-5 border-l-4 border-[#0D9488]">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#0D9488] mb-1.5 block">Reason for Referral</span>
+            <p className="text-lg font-semibold text-slate-800 leading-snug">{ed.referral.reason}</p>
+          </div>
+        </div>
+      )}
 
       <AlertStrip redFlags={triage.red_flags} missingInfo={triage.missing_info} />
       <ActionChips items={triage.action_items} />
 
-      <div className="flex flex-1 mx-6 mb-6 overflow-hidden">
+      <div className="flex mx-6 mb-6 gap-0">
         <AISummaryPanel
           summaryNarrative={data.summary_narrative}
           triageReasoning={triage.reasoning}
@@ -116,7 +182,7 @@ export function ReviewWorkspace() {
           oneLineSummary={data.one_line_summary}
         />
 
-        <div className="flex-1 overflow-y-auto pl-4 space-y-6 pb-8">
+        <div className="flex-1 min-w-0 pl-4 space-y-6 pb-8">
           {/* Section 1: Vitals + Medications */}
           <motion.div className="flex gap-6" custom={sectionIndex++} initial="hidden" animate="visible" variants={cardVariants}>
             <div className="w-[55%]"><VitalsCard vitals={cd?.recent_vitals} /></div>

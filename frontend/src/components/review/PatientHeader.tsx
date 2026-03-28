@@ -1,7 +1,7 @@
 import type { Patient, ReferralInfo, ReferringProvider, ReferralStatus, TriageUrgency } from "../../types/referral";
 import { Button } from "../ui/button";
 import { StatusBadge, TriageBadgeLarge } from "../shared/StatusBadge";
-import { FileText, CheckCircle } from "lucide-react";
+import { FileText, CheckCircle, Loader2, FlaskConical } from "lucide-react";
 
 interface PatientHeaderProps {
   patient?: Patient;
@@ -13,10 +13,14 @@ interface PatientHeaderProps {
   createdAt: string | null;
   onGeneratePdf: () => void;
   onFinalize: () => void;
+  pdfLoading?: boolean;
+  finalizing?: boolean;
+  clinicalTrialFlagged?: boolean;
 }
 
 export function PatientHeader({
   patient, referral, referringProvider, status, urgency, confidence, createdAt, onGeneratePdf, onFinalize,
+  pdfLoading, finalizing, clinicalTrialFlagged,
 }: PatientHeaderProps) {
   const name = [patient?.first_name, patient?.last_name].filter(Boolean).join(" ") || "Unknown Patient";
   const ageSex = [patient?.age ? `${patient.age}` : null, patient?.sex?.[0]?.toUpperCase()].filter(Boolean).join("");
@@ -64,15 +68,28 @@ export function PatientHeader({
           </div>
           <TriageBadgeLarge urgency={urgency} confidence={confidence} />
         </div>
+        {clinicalTrialFlagged && (
+          <a href="https://clinicaltrials.gov" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-colors">
+            <FlaskConical className="h-3.5 w-3.5" />
+            Clinical Trial Candidate
+          </a>
+        )}
         <div className="flex gap-2">
-          <Button size="sm" onClick={onGeneratePdf}>
-            <FileText className="h-4 w-4" />
-            Generate PDF
+          <Button size="sm" onClick={onGeneratePdf} disabled={pdfLoading}>
+            {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+            {pdfLoading ? "Generating..." : "Generate PDF"}
           </Button>
-          <Button variant="outline" size="sm" onClick={onFinalize}>
-            <CheckCircle className="h-4 w-4" />
-            Finalize Review
-          </Button>
+          {status !== "finalized" ? (
+            <Button variant="outline" size="sm" onClick={onFinalize} disabled={finalizing}>
+              {finalizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              {finalizing ? "Finalizing..." : "Finalize Review"}
+            </Button>
+          ) : (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-50 text-emerald-700 text-xs font-medium">
+              <CheckCircle className="h-3.5 w-3.5" /> Finalized
+            </span>
+          )}
         </div>
       </div>
     </header>

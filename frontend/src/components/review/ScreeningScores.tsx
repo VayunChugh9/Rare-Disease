@@ -22,7 +22,17 @@ function getMaxScore(instrument: string): number {
 export function ScreeningScores({ screenings }: { screenings?: Screening[] }) {
   if (!screenings || screenings.length === 0) return null;
 
-  const sorted = [...screenings].sort((a, b) => {
+  // Deduplicate: keep only the most recent score per instrument
+  const byInstrument = new Map<string, Screening>();
+  for (const s of screenings) {
+    const key = s.instrument;
+    const existing = byInstrument.get(key);
+    if (!existing || (s.date && (!existing.date || s.date > existing.date))) {
+      byInstrument.set(key, s);
+    }
+  }
+
+  const deduped = Array.from(byInstrument.values()).sort((a, b) => {
     const aConcerning = isConcerning(a.instrument, parseFloat(a.score) || 0);
     const bConcerning = isConcerning(b.instrument, parseFloat(b.score) || 0);
     if (aConcerning && !bConcerning) return -1;
@@ -34,15 +44,15 @@ export function ScreeningScores({ screenings }: { screenings?: Screening[] }) {
     <Card>
       <CardHeader><CardTitle>Screening Scores</CardTitle></CardHeader>
       <CardContent>
-        <div className="flex gap-4 overflow-x-auto pb-2">
-          {sorted.map((screening, i) => {
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {deduped.map((screening, i) => {
             const score = parseFloat(screening.score) || 0;
             const max = getMaxScore(screening.instrument);
             const concerning = isConcerning(screening.instrument, score);
             const pct = Math.min((score / max) * 100, 100);
 
             return (
-              <div key={i} className={`min-w-[160px] flex-1 p-4 rounded-xl ${concerning ? "bg-red-50/60 border border-red-200/30" : "bg-slate-50/50"}`}>
+              <div key={i} className={`p-4 rounded-xl ${concerning ? "bg-red-50/60 border border-red-200/30" : "bg-slate-50/50"}`}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <h4 className="font-bold text-sm text-[#0F172A]">{screening.instrument}</h4>

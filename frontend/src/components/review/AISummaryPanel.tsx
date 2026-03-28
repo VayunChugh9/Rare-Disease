@@ -33,18 +33,18 @@ export function AISummaryPanel({
   }, []);
 
   return (
-    <div className="flex h-full">
+    <div className="flex w-[35%] shrink-0 sticky top-[76px] self-start" style={{ maxHeight: "calc(100vh - 92px)" }}>
       <AnimatePresence initial={false}>
         {isOpen && (
           <motion.aside
             key="panel"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: "35%", opacity: 1 }}
+            animate={{ width: "100%", opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
             className="overflow-hidden shrink-0"
           >
-            <div className="glass rounded-2xl p-6 m-2 mr-0 h-[calc(100%-16px)] overflow-y-auto">
+            <div className="glass rounded-2xl p-6 m-2 mr-0 overflow-y-auto" style={{ maxHeight: "calc(100vh - 108px)" }}>
               <div className="flex items-center gap-2 mb-6">
                 <Sparkles className="h-4 w-4 text-[#0D9488]" />
                 <h2 className="section-label text-[#0F172A]">AI-Generated Summary</h2>
@@ -52,13 +52,6 @@ export function AISummaryPanel({
                   Review before finalizing
                 </span>
               </div>
-
-              {referralReason && (
-                <div className="border border-[#0D9488]/20 bg-[#0D9488]/5 rounded-xl p-4 mb-6">
-                  <span className="section-label text-[#0D9488] block mb-1">Referral Reason</span>
-                  <p className="font-semibold text-[#0D9488]">{referralReason}</p>
-                </div>
-              )}
 
               {summaryNarrative && (
                 <div className="space-y-3 text-sm leading-relaxed text-[#64748B] mb-6">

@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from backend.app.models.db_models import CorrectionRow, ReferralRow
 from backend.app.services.pipeline import process_referral
+from backend.app.services.pdf_generator import generate_summary_pdf
 
 router = APIRouter(prefix="/api/referrals", tags=["referrals"])
+
+
+def _normalize_urgency(raw: str | None) -> str:
+    """Normalize triage urgency to lowercase_underscore format."""
+    if not raw:
+        return "needs_clarification"
+    return raw.strip().lower().replace("-", "_").replace(" ", "_")
 
 
 # ---------------------------------------------------------------------------
@@ -21,7 +31,9 @@ router = APIRouter(prefix="/api/referrals", tags=["referrals"])
 
 @router.post("/upload")
 async def upload_referral(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    referral_note: Optional[UploadFile] = File(None),
+    hie_file: Optional[UploadFile] = File(None),
     referral_specialty: Optional[str] = Form(None),
     referral_reason: Optional[str] = Form(None),
     referral_urgency: Optional[str] = Form(None),
@@ -30,14 +42,40 @@ async def upload_referral(
     referring_provider_phone: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
-    """Upload a referral document for processing.
+    """Upload referral documents for processing.
 
-    Accepts CCD/CCDA XML, plain text, or PDF files.
-    Optional form fields provide referral context not in the document.
+    Supports two modes:
+    - Single file via 'file' field (legacy)
+    - Dual files: 'referral_note' (txt/pdf) + 'hie_file' (CCD/CCDA XML)
     """
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty file")
+    # Determine which files we have
+    note_content = None
+    note_filename = None
+    hie_content = None
+    hie_filename = None
+
+    if referral_note:
+        note_content = await referral_note.read()
+        note_filename = referral_note.filename or "referral_note.txt"
+    if hie_file:
+        hie_content = await hie_file.read()
+        hie_filename = hie_file.filename or "patient_hie.xml"
+    if file:
+        # Legacy single-file mode
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Empty file")
+        fname = file.filename or "unknown"
+        # Auto-detect which slot it belongs to
+        if fname.lower().endswith(".xml"):
+            hie_content = content
+            hie_filename = fname
+        else:
+            note_content = content
+            note_filename = fname
+
+    if not note_content and not hie_content:
+        raise HTTPException(status_code=400, detail="At least one file is required")
 
     # Build optional referral context from form fields
     referral_info = None
@@ -58,8 +96,10 @@ async def upload_referral(
 
     referral_id = process_referral(
         db,
-        filename=file.filename or "unknown",
-        content_bytes=content,
+        filename=note_filename or hie_filename or "unknown",
+        content_bytes=note_content or b"",
+        hie_filename=hie_filename,
+        hie_content_bytes=hie_content,
         referral_info=referral_info,
         referring_provider=referring_provider,
     )
@@ -86,7 +126,7 @@ def get_referral(referral_id: str, db: Session = Depends(get_db)):
         "one_line_summary": row.one_line_summary,
         "summary_narrative": row.summary_narrative,
         "triage": {
-            "urgency": row.triage_urgency,
+            "urgency": _normalize_urgency(row.triage_urgency),
             "confidence": row.triage_confidence,
             "reasoning": row.triage_reasoning,
             "red_flags": row.triage_red_flags or [],
@@ -109,7 +149,7 @@ def get_referral_status(referral_id: str, db: Session = Depends(get_db)):
     return {
         "referral_id": row.id,
         "status": row.status,
-        "triage_urgency": row.triage_urgency,
+        "triage_urgency": _normalize_urgency(row.triage_urgency),
     }
 
 
@@ -138,13 +178,61 @@ def list_referrals(
                 "referral_id": r.id,
                 "status": r.status,
                 "one_line_summary": r.one_line_summary,
-                "triage_urgency": r.triage_urgency,
+                "triage_urgency": _normalize_urgency(r.triage_urgency),
                 "triage_confidence": r.triage_confidence,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# PDF generation
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{referral_id}/summary-pdf")
+def get_summary_pdf(referral_id: str, db: Session = Depends(get_db)):
+    """Generate a concise summary PDF for the referral."""
+    row = db.query(ReferralRow).filter(ReferralRow.id == referral_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    if row.status == "processing":
+        raise HTTPException(status_code=409, detail="Referral is still processing")
+
+    pdf_bytes = generate_summary_pdf(row)
+
+    patient = (row.extracted_data or {}).get("patient", {})
+    name = f"{patient.get('last_name', 'Unknown')}_{patient.get('first_name', '')}"
+    filename = f"RefTriage_{name}_{referral_id[:8]}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Finalize
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{referral_id}/finalize")
+def finalize_referral(referral_id: str, db: Session = Depends(get_db)):
+    """Mark a referral as finalized."""
+    row = db.query(ReferralRow).filter(ReferralRow.id == referral_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    if row.status == "finalized":
+        return {"referral_id": row.id, "status": "finalized", "message": "Already finalized"}
+
+    row.status = "finalized"
+    row.finalized_at = datetime.utcnow()
+    db.commit()
+
+    return {"referral_id": row.id, "status": "finalized"}
 
 
 # ---------------------------------------------------------------------------

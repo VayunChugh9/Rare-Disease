@@ -43,7 +43,7 @@ export async function getReferralStatus(
 }
 
 export async function uploadReferral(
-  file: File,
+  files: { referralNote?: File; hieFile?: File },
   context?: {
     specialty?: string;
     reason?: string;
@@ -54,7 +54,8 @@ export async function uploadReferral(
   }
 ): Promise<UploadResponse> {
   const form = new FormData();
-  form.append("file", file);
+  if (files.referralNote) form.append("referral_note", files.referralNote);
+  if (files.hieFile) form.append("hie_file", files.hieFile);
   if (context?.specialty) form.append("referral_specialty", context.specialty);
   if (context?.reason) form.append("referral_reason", context.reason);
   if (context?.urgency) form.append("referral_urgency", context.urgency);
@@ -78,5 +79,31 @@ export async function saveCorrection(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(correction),
   });
+  return handleResponse(res);
+}
+
+export async function generatePdf(referralId: string): Promise<void> {
+  const res = await fetch(`${BASE}/${referralId}/summary-pdf`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API ${res.status}: ${body}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const disposition = res.headers.get("Content-Disposition");
+  const filename = disposition?.match(/filename="?([^"]+)"?/)?.[1] ?? `RefTriage_${referralId.slice(0, 8)}.pdf`;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function finalizeReferral(
+  referralId: string
+): Promise<{ referral_id: string; status: string }> {
+  const res = await fetch(`${BASE}/${referralId}/finalize`, { method: "POST" });
   return handleResponse(res);
 }

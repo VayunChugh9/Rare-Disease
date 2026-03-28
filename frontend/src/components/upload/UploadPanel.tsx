@@ -1,15 +1,93 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Database, FileUp } from "lucide-react";
 import { uploadReferral } from "../../api/client";
 
 type Phase = "idle" | "uploading" | "processing" | "done" | "error";
 
+const PROCESSING_STAGES = [
+  { label: "Uploading documents", duration: 2000 },
+  { label: "Parsing referral note", duration: 4000 },
+  { label: "Extracting clinical data from CCD", duration: 5000 },
+  { label: "Running AI extraction & structuring", duration: 8000 },
+  { label: "Generating triage recommendation", duration: 6000 },
+  { label: "Building clinical summary", duration: 4000 },
+];
+
+function FileDropZone({
+  label,
+  description,
+  accept,
+  icon: Icon,
+  file,
+  onFile,
+}: {
+  label: string;
+  description: string;
+  accept: string;
+  icon: React.ElementType;
+  file: File | null;
+  onFile: (f: File) => void;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+      }}
+      className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+        dragOver
+          ? "border-teal-400 bg-teal-50/50"
+          : file
+          ? "border-teal-300 bg-teal-50/30"
+          : "border-white/40 bg-slate-50/50 hover:border-slate-300"
+      }`}
+    >
+      {file ? (
+        <div className="flex flex-col items-center justify-center gap-2 py-2">
+          <FileText className="h-8 w-8 text-teal-600" />
+          <p className="text-sm font-medium text-slate-800 text-center break-all px-2">{file.name}</p>
+          <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+          <button
+            onClick={(e) => { e.stopPropagation(); onFile(null as unknown as File); }}
+            className="text-xs text-slate-500 hover:text-slate-700 underline"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <>
+          <Icon className="mx-auto h-6 w-6 text-stone-400 mb-2" />
+          <p className="text-sm font-medium text-slate-700 mb-0.5">{label}</p>
+          <p className="text-xs text-slate-400 mb-2">{description}</p>
+          <label className="cursor-pointer inline-flex items-center gap-1.5 text-sm text-teal-600 hover:text-teal-700 font-medium">
+            <FileUp className="h-3.5 w-3.5" />
+            Browse files
+            <input
+              type="file"
+              className="hidden"
+              accept={accept}
+              onChange={(e) => {
+                if (e.target.files?.[0]) onFile(e.target.files[0]);
+              }}
+            />
+          </label>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function UploadPanel() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>("idle");
-  const [file, setFile] = useState<File | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+  const [referralNote, setReferralNote] = useState<File | null>(null);
+  const [hieFile, setHieFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [referralId, setReferralId] = useState("");
 
@@ -18,33 +96,62 @@ export function UploadPanel() {
   const [reason, setReason] = useState("");
   const [providerName, setProviderName] = useState("");
 
-  const handleFile = useCallback((f: File) => {
-    const validTypes = [".xml", ".txt", ".pdf", ".json"];
+  const handleNoteFile = useCallback((f: File) => {
+    if (!f) { setReferralNote(null); return; }
+    const validTypes = [".txt", ".pdf"];
     const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
     if (!validTypes.includes(ext)) {
-      setError(`Unsupported file type: ${ext}. Accepted: XML, TXT, PDF`);
+      setError(`Referral note must be TXT or PDF. Got: ${ext}`);
       return;
     }
-    setFile(f);
+    setReferralNote(f);
     setError("");
   }, []);
 
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragOver(false);
-    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-  }
+  const handleHieFile = useCallback((f: File) => {
+    if (!f) { setHieFile(null); return; }
+    const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+    if (ext !== ".xml") {
+      setError(`Patient HIE must be XML (CCD/CCDA). Got: ${ext}`);
+      return;
+    }
+    setHieFile(f);
+    setError("");
+  }, []);
+
+  const [stageIndex, setStageIndex] = useState(0);
+  const stageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hasFiles = referralNote || hieFile;
+
+  // Advance through processing stages for visual feedback
+  useEffect(() => {
+    if (phase !== "uploading" && phase !== "processing") {
+      setStageIndex(0);
+      return;
+    }
+    if (stageIndex < PROCESSING_STAGES.length - 1) {
+      stageTimerRef.current = setTimeout(() => {
+        setStageIndex((i) => i + 1);
+      }, PROCESSING_STAGES[stageIndex].duration);
+      return () => { if (stageTimerRef.current) clearTimeout(stageTimerRef.current); };
+    }
+  }, [phase, stageIndex]);
 
   async function handleSubmit() {
-    if (!file) return;
+    if (!hasFiles) return;
     setPhase("uploading");
+    setStageIndex(0);
     try {
       setPhase("processing");
-      const res = await uploadReferral(file, {
-        specialty: specialty || undefined,
-        reason: reason || undefined,
-        providerName: providerName || undefined,
-      });
+      const res = await uploadReferral(
+        { referralNote: referralNote ?? undefined, hieFile: hieFile ?? undefined },
+        {
+          specialty: specialty || undefined,
+          reason: reason || undefined,
+          providerName: providerName || undefined,
+        }
+      );
       setReferralId(res.referral_id);
       setPhase("done");
     } catch (err) {
@@ -56,10 +163,10 @@ export function UploadPanel() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-lg font-semibold text-slate-800 mb-1">
-        Upload Referral Document
+        Upload Referral Documents
       </h1>
       <p className="text-sm text-slate-500 mb-8">
-        Upload a CCD/CCDA XML, referral letter (TXT), or PDF for AI-assisted extraction and triage.
+        Upload a referral note and/or patient CCD/CCDA XML for AI-assisted extraction and triage.
       </p>
 
       {phase === "done" ? (
@@ -80,71 +187,36 @@ export function UploadPanel() {
         </div>
       ) : (
         <>
-          {/* Drop zone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            className={`relative rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
-              dragOver
-                ? "border-teal-400 bg-teal-50/50"
-                : file
-                ? "border-teal-300 bg-teal-50/30"
-                : "border-white/40 bg-slate-50/50 hover:border-slate-300"
-            }`}
-          >
-            {file ? (
-              <div className="flex items-center justify-center gap-3">
-                <FileText className="h-8 w-8 text-teal-600" />
-                <div className="text-left">
-                  <p className="text-sm font-medium text-slate-800">
-                    {file.name}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {(file.size / 1024).toFixed(1)} KB
-                  </p>
-                </div>
-                <button
-                  onClick={() => { setFile(null); setPhase("idle"); }}
-                  className="ml-4 text-xs text-slate-500 hover:text-slate-700 underline"
-                >
-                  Change
-                </button>
-              </div>
-            ) : (
-              <>
-                <Upload className="mx-auto h-8 w-8 text-stone-400 mb-3" />
-                <p className="text-sm text-slate-600 mb-1">
-                  Drag and drop a file, or{" "}
-                  <label className="cursor-pointer text-teal-600 hover:text-teal-700 font-medium">
-                    browse
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".xml,.txt,.pdf,.json"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) handleFile(e.target.files[0]);
-                      }}
-                    />
-                  </label>
-                </p>
-                <p className="text-xs text-slate-400">
-                  XML, TXT, PDF supported
-                </p>
-              </>
-            )}
+          {/* Dual file upload zones */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <FileDropZone
+              label="Referral Note"
+              description="Fax, letter, or typed note (TXT, PDF)"
+              accept=".txt,.pdf"
+              icon={Upload}
+              file={referralNote}
+              onFile={handleNoteFile}
+            />
+            <FileDropZone
+              label="Patient HIE / CCD"
+              description="CCD/CCDA XML from health exchange"
+              accept=".xml"
+              icon={Database}
+              file={hieFile}
+              onFile={handleHieFile}
+            />
           </div>
 
           {error && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
             </div>
           )}
 
           {/* Optional context */}
-          {file && (
-            <div className="mt-6 space-y-3">
+          {hasFiles && (
+            <div className="mb-4 space-y-3">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
                 Optional referral context
               </p>
@@ -172,28 +244,51 @@ export function UploadPanel() {
             </div>
           )}
 
-          {/* Submit */}
-          {file && (
+          {/* Submit / Progress */}
+          {hasFiles && (phase === "uploading" || phase === "processing" ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Loader2 className="h-5 w-5 animate-spin text-[#0D9488]" />
+                <span className="text-sm font-semibold text-slate-800">Processing referral...</span>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full h-2 bg-slate-100 rounded-full mb-4 overflow-hidden">
+                <div
+                  className="h-full bg-[#0D9488] rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${((stageIndex + 1) / PROCESSING_STAGES.length) * 100}%` }}
+                />
+              </div>
+              {/* Stage list */}
+              <div className="space-y-2">
+                {PROCESSING_STAGES.map((stage, i) => (
+                  <div key={i} className="flex items-center gap-2.5">
+                    {i < stageIndex ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : i === stageIndex ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-[#0D9488] shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border-2 border-slate-200 shrink-0" />
+                    )}
+                    <span className={`text-sm ${
+                      i < stageIndex ? "text-emerald-600" :
+                      i === stageIndex ? "text-slate-800 font-medium" :
+                      "text-slate-400"
+                    }`}>
+                      {stage.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
             <button
               onClick={handleSubmit}
-              disabled={phase === "uploading" || phase === "processing"}
-              className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg bg-[#0D9488] py-2.5 text-sm font-medium text-white shadow-sm hover:bg-teal-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#0D9488] py-2.5 text-sm font-medium text-white shadow-sm hover:bg-teal-700 transition-colors"
             >
-              {phase === "uploading" || phase === "processing" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {phase === "uploading"
-                    ? "Uploading..."
-                    : "Extracting and summarizing..."}
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4" />
-                  Process Referral
-                </>
-              )}
+              <Upload className="h-4 w-4" />
+              Process Referral
             </button>
-          )}
+          ))}
         </>
       )}
     </div>
