@@ -22,4 +22,4 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.6"
       - key: NODE_VERSION
-        value: "20.11.0"
+        value: "22.14.0"
