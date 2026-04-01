@@ -8,6 +8,8 @@ venv/
 dist/
 build/
 .venv/
+frontend/test-results/
+e2e/screenshots/
 reftriage.db
 uploads/
 opencode.json

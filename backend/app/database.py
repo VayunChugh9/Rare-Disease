@@ -16,6 +16,10 @@ _project_root = Path(__file__).resolve().parents[2]
 _default_db = f"sqlite:///{_project_root / 'reftriage.db'}"
 DATABASE_URL = os.getenv("DATABASE_URL", _default_db)
 
+# Render provides postgres:// but SQLAlchemy requires postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 engine = create_engine(
     DATABASE_URL,
     # SQLite needs check_same_thread=False for FastAPI's async usage

@@ -1,0 +1,25 @@
+databases:
+  - name: reftriage-db
+    plan: free
+    databaseName: reftriage
+
+services:
+  - type: web
+    name: reftriage
+    runtime: python
+    plan: free
+    repo: https://github.com/VayunChugh9/Rare-Disease.git
+    branch: main
+    buildCommand: ./render-build.sh
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reftriage-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11.6"
+      - key: NODE_VERSION
+        value: "20.11.0"
