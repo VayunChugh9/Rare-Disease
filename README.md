@@ -1,6 +1,6 @@
 # RefTriage — Developer Context Guide
 
-> **For Claude Code / Cursor**: This file tells you which reference doc to read when building each component. Load all four files (`REFTRIAGE_SPEC.md`, `reftriage_schemas.json`, `reftriage_mappings.md`, `reftriage_prompts.md`) into context, then use this guide to navigate.
+>reference doc to read when building. Load all four files (`REFTRIAGE_SPEC.md`, `reftriage_schemas.json`, `reftriage_mappings.md`, `reftriage_prompts.md`) into context, then use this guide to navigate.
 
 ---
 
